@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Robo-Sketch: A Kinematics Web App</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background-color: #f0f2f5;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+        }
+        h1 {
+            color: #2c3e50;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        #app-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background: #fff;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+        }
+        #canvas-container {
+            border: 2px solid #bdc3c7;
+            border-radius: 10px;
+            background: #ecf0f1;
+            box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.05);
+            margin-bottom: 25px;
+        }
+        canvas {
+            cursor: crosshair;
+            display: block;
+        }
+        .controls {
+            width: 100%;
+            max-width: 600px;
+            margin-top: 10px;
+        }
+        .control-group {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .control-group label {
+            width: 120px;
+            font-weight: bold;
+            font-size: 1.1em;
+            color: #34495e;
+            text-align: right;
+            padding-right: 15px;
+        }
+        .control-group input[type="range"] {
+            flex-grow: 1;
+            -webkit-appearance: none;
+            height: 8px;
+            background: #dcdde1;
+            border-radius: 5px;
+            outline: none;
+            transition: background-color 0.3s;
+        }
+        .control-group input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 20px;
+            height: 20px;
+            background: #3498db;
+            border: 2px solid #fff;
+            border-radius: 50%;
+            cursor: grab;
+            transition: background-color 0.3s, transform 0.2s;
+        }
+        .control-group input[type="range"]:active::-webkit-slider-thumb {
+            cursor: grabbing;
+            background: #2980b9;
+            transform: scale(1.1);
+        }
+        #clear-button {
+            display: block;
+            width: 200px;
+            margin: 20px auto 0;
+            padding: 12px 25px;
+            font-size: 1.1em;
+            font-weight: bold;
+            color: #fff;
+            background-color: #e74c3c;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.3s, transform 0.2s;
+            box-shadow: 0 4px 10px rgba(231, 76, 60, 0.3);
+        }
+        #clear-button:hover {
+            background-color: #c0392b;
+            transform: translateY(-2px);
+        }
+    </style>
+</head>
+<body>
+
+    <div id="app-container">
+        <h1>🤖 Robo-Sketch: A Kinematics Web App</h1>
+        <div id="canvas-container">
+            <canvas id="robotCanvas" width="600" height="400"></canvas>
+        </div>
+        <div class="controls">
+            <div class="control-group">
+                <label for="joint1">Joint 1 Angle (°)</label>
+                <input type="range" id="joint1" min="0" max="180" value="90">
+            </div>
+            <div class="control-group">
+                <label for="joint2">Joint 2 Angle (°)</label>
+                <input type="range" id="joint2" min="-180" max="180" value="0">
+            </div>
+            <div class="control-group">
+                <label for="penWidth">Pen Width (px)</label>
+                <input type="range" id="penWidth" min="1" max="10" value="3">
+            </div>
+        </div>
+        <button id="clear-button">Clear Canvas</button>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // Get canvas and context
+            const canvas = document.getElementById('robotCanvas');
+            const ctx = canvas.getContext('2d');
+            const clearButton = document.getElementById('clear-button');
+
+            // Get slider inputs
+            const joint1Slider = document.getElementById('joint1');
+            const joint2Slider = document.getElementById('joint2');
+            const penWidthSlider = document.getElementById('penWidth');
+
+            // Robot arm parameters
+            const armBaseX = canvas.width / 2;
+            const armBaseY = canvas.height - 20;
+            const armLength1 = 150;
+            const armLength2 = 120;
+            const penOffset = 15; // To make the pen tip at the end of the arm
+
+            // Drawing state
+            let isDrawing = false;
+            let lastX, lastY;
+
+            // Function to draw the entire scene
+            function draw() {
+                // Clear the robot arm part, but not the drawing trail
+                ctx.clearRect(0, 0, canvas.width, armBaseY);
+                
+                // Get slider values
+                let angle1 = (joint1Slider.value - 90) * Math.PI / 180;
+                let angle2 = joint2Slider.value * Math.PI / 180;
+
+                // Calculate joint 1 endpoint (Forward Kinematics)
+                let joint1X = armBaseX + armLength1 * Math.cos(angle1);
+                let joint1Y = armBaseY + armLength1 * Math.sin(angle1);
+
+                // Calculate joint 2 (end-effector) endpoint
+                let endX = joint1X + armLength2 * Math.cos(angle1 + angle2);
+                let endY = joint1Y + armLength2 * Math.sin(angle1 + angle2);
+                
+                // Store the current position for drawing trail
+                const currentPenX = endX + penOffset * Math.cos(angle1 + angle2);
+                const currentPenY = endY + penOffset * Math.sin(angle1 + angle2);
+                
+                // Draw the robot arm
+                ctx.beginPath();
+                ctx.lineWidth = 10;
+                ctx.lineCap = 'round';
+                ctx.strokeStyle = '#3498db';
+                ctx.moveTo(armBaseX, armBaseY);
+                ctx.lineTo(joint1X, joint1Y);
+                ctx.stroke();
+
+                ctx.beginPath();
+                ctx.lineWidth = 10;
+                ctx.strokeStyle = '#e74c3c';
+                ctx.moveTo(joint1X, joint1Y);
+                ctx.lineTo(endX, endY);
+                ctx.stroke();
+
+                // Draw the pen tip
+                ctx.beginPath();
+                ctx.arc(currentPenX, currentPenY, penWidthSlider.value / 2 + 3, 0, 2 * Math.PI);
+                ctx.fillStyle = '#2c3e50';
+                ctx.fill();
+
+                // Start drawing a new trail segment
+                if (isDrawing && lastX && lastY) {
+                    drawTrail(currentPenX, currentPenY);
+                }
+                
+                // Update last position for the next segment
+                lastX = currentPenX;
+                lastY = currentPenY;
+            }
+
+            // Function to draw the trail on the canvas
+            function drawTrail(currentX, currentY) {
+                ctx.beginPath();
+                ctx.lineCap = 'round';
+                ctx.lineWidth = penWidthSlider.value;
+                ctx.strokeStyle = '#2c3e50';
+                ctx.moveTo(lastX, lastY);
+                ctx.lineTo(currentX, currentY);
+                ctx.stroke();
+            }
+
+            // Function to reset the canvas
+            function clearCanvas() {
+                ctx.fillStyle = '#ecf0f1';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                isDrawing = false; // Stop drawing after clearing
+                draw(); // Redraw the robot arm on the fresh canvas
+            }
+
+            // Event listeners
+            joint1Slider.addEventListener('input', () => {
+                isDrawing = true;
+                draw();
+            });
+            joint2Slider.addEventListener('input', () => {
+                isDrawing = true;
+                draw();
+            });
+            clearButton.addEventListener('click', clearCanvas);
+            
+            // Initial setup
+            clearCanvas();
+        });
+    </script>
+</body>
+</html>
